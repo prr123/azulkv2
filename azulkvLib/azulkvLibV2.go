@@ -22,7 +22,7 @@ import (
 	"github.com/dgryski/go-t1ha"
 )
 
-type kvObj struct {
+type KvObj struct {
 	DirPath string
 	Dbg bool
 	Cap int
@@ -39,9 +39,9 @@ type hash struct {
 	Idx int
 }
 
-func InitKV(dirPath string, dbg bool) (dbpt *kvObj, err error){
+func InitKV(dirPath string, dbg bool) (dbpt *KvObj, err error){
 
-	db := kvObj {
+	db := KvObj {
 		Cap: 500,
 		Dbg: dbg,
 	}
@@ -123,7 +123,7 @@ func GenRanData (rangeStart, rangeEnd int) (bdat []byte) {
 }
 
 
-func (dbpt *kvObj) FillRan (level int) (err error){
+func (dbpt *KvObj) FillRan (level int) (err error){
 
 	db := *dbpt
 	h := hash {}
@@ -147,7 +147,7 @@ func (dbpt *kvObj) FillRan (level int) (err error){
 }
 
 
-func (dbp *kvObj) AddEntry (key, val string) (err error){
+func (dbp *KvObj) AddEntry (key, val string) (err error){
 
 	db := *dbp
 	idx := (*db.Entries)
@@ -174,7 +174,7 @@ func (dbp *kvObj) AddEntry (key, val string) (err error){
 	return nil
 }
 
-func (dbp *kvObj) UpdEntry (key, val string) (idx int){
+func (dbp *KvObj) UpdEntry (key, val string) (idx int){
 	db := *dbp
 	for i:=0; i< (*db.Entries); i++ {
 		if (*db.Keys)[i] == key {
@@ -187,7 +187,7 @@ func (dbp *kvObj) UpdEntry (key, val string) (idx int){
 	return -1
 }
 
-func (dbp *kvObj) UpdEntryByIdx (idx int, val string) (err error){
+func (dbp *KvObj) UpdEntryByIdx (idx int, val string) (err error){
 
 	db := *dbp
 	if idx < 0 ||idx > (*db.Entries) {return fmt.Errorf("invalid index")}
@@ -196,7 +196,7 @@ func (dbp *kvObj) UpdEntryByIdx (idx int, val string) (err error){
 	return nil
 }
 
-func (dbp *kvObj) DelEntry (idx int) (err error){
+func (dbp *KvObj) DelEntry (idx int) (err error){
 
 	db := *dbp
 	if idx > db.Cap {return fmt.Errorf("invalid index")}
@@ -209,7 +209,7 @@ func (dbp *kvObj) DelEntry (idx int) (err error){
 	return nil
 }
 
-func (dbp *kvObj) GetVal (keyStr string) (idx int, valstr string){
+func (dbp *KvObj) GetVal (keyStr string) (idx int, valstr string){
 
 	db := *dbp
 	idx = -1
@@ -223,7 +223,7 @@ func (dbp *kvObj) GetVal (keyStr string) (idx int, valstr string){
 	return idx, ""
 }
 
-func (dbp *kvObj) GetValByIdx (idx int)(valstr string, err error){
+func (dbp *KvObj) GetValByIdx (idx int)(valstr string, err error){
 
 	db := *dbp
 	if idx < 0 || idx > (*db.Entries) {return "", fmt.Errorf("not a valid index!")}
@@ -231,7 +231,7 @@ func (dbp *kvObj) GetValByIdx (idx int)(valstr string, err error){
 	return valstr, nil
 }
 
-func (dbp *kvObj) GetValByHash (hash uint64) (idx int, valstr string){
+func (dbp *KvObj) GetValByHash (hash uint64) (idx int, valstr string){
 
 	db := *dbp
 //	hashval := GetHash([]byte(key))
@@ -246,7 +246,7 @@ func (dbp *kvObj) GetValByHash (hash uint64) (idx int, valstr string){
 	return idx, ""
 }
 
-func (dbp *kvObj) FindKeyByHash (key string) (idx int){
+func (dbp *KvObj) FindKeyByHash (key string) (idx int){
 	db := *dbp
 	hashval := GetHash([]byte(key))
 
@@ -259,7 +259,7 @@ func (dbp *kvObj) FindKeyByHash (key string) (idx int){
 	return -1
 }
 
-func (dbp *kvObj) FindKey (keyStr string) (idx int) {
+func (dbp *KvObj) FindKey (keyStr string) (idx int) {
 
 	db := *dbp
 	for i:=0; i< (*db.Entries); i++ {
@@ -272,7 +272,7 @@ func (dbp *kvObj) FindKey (keyStr string) (idx int) {
 
 }
 
-func (dbp *kvObj) GetKeyByIdx (idx int) (key string) {
+func (dbp *KvObj) GetKeyByIdx (idx int) (key string) {
 
 	db := *dbp
 	if idx > (*db.Entries) {return ""}
@@ -281,12 +281,12 @@ func (dbp *kvObj) GetKeyByIdx (idx int) (key string) {
 	return key
 }
 
-func (dbP *kvObj) Clean () (err error){
+func (dbP *KvObj) Clean () (err error){
 
 	return err
 }
 
-func (dbp *kvObj) Backup (tabNam string) (err error){
+func (dbp *KvObj) Backup (tabNam string) (err error){
 
     db := *dbp
 //    kvMap, err := InitKV("testDb", true)
@@ -351,7 +351,7 @@ func (dbp *kvObj) Backup (tabNam string) (err error){
 }
 
 
-func (dbp *kvObj) Load(tabNam string) (err error){
+func (dbp *KvObj) Load(tabNam string) (err error){
 	var numEntries uint32
 
     db := *dbp
@@ -406,7 +406,7 @@ func (dbp *kvObj) Load(tabNam string) (err error){
 	return nil
 }
 
-func (dbp *kvObj) SortHash(){
+func (dbp *KvObj) SortHash(){
 
     db := *dbp
 	num := (*db.Entries)
@@ -428,7 +428,7 @@ func (dbp *kvObj) SortHash(){
 	dbp = &db
 }
 
-func PrintDb(dbp *kvObj) {
+func PrintDb(dbp *KvObj) {
 
     db := *dbp
 //  dbg := db.Dbg
@@ -441,7 +441,7 @@ func PrintDb(dbp *kvObj) {
     return
 }
 
-func (dbpt *kvObj) PrintKV (idx int, num int) {
+func (dbpt *KvObj) PrintKV (idx int, num int) {
 
 	db := *dbpt
 	fmt.Printf("********* Entries: %d *************\n", (*db.Entries))
