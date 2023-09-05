@@ -2,13 +2,22 @@
 package azulkv2
 
 import (
-//	"log"
+	"log"
+//	"fmt"
 	"testing"
 	"os"
+    "math/rand"
+    "time"
 )
 
 func TestAddEntry(t *testing.T) {
-	kv, err := InitKV("testDb", true)
+
+	_, err := os.Stat("testDb")
+	if err == nil {
+		err1 := os.RemoveAll("testDb")
+		if err1 != nil {t.Errorf("error -- could not remove files: %v", err1)}
+	}
+	kv, err := InitKV("testDb", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
 	err = kv.AddEntry("key1", "val1")
@@ -19,7 +28,7 @@ func TestAddEntry(t *testing.T) {
 }
 
 func TestGetEntry(t *testing.T) {
-	kv, err := InitKV("testDb", true)
+	kv, err := InitKV("testDb", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
 	err = kv.AddEntry("key1", "val1")
@@ -46,7 +55,7 @@ func TestGetEntry(t *testing.T) {
 
 
 func TestUpdEntry(t *testing.T) {
-	kv, err := InitKV("testDb", true)
+	kv, err := InitKV("testDb", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
 	err = kv.AddEntry("key1", "val1")
@@ -68,7 +77,7 @@ func TestUpdEntry(t *testing.T) {
 
 func TestDelEntry(t *testing.T) {
 
-	kv, err := InitKV("testDb", true)
+	kv, err := InitKV("testDb", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
 	err = kv.AddEntry("key1", "val1")
@@ -89,7 +98,7 @@ func TestDelEntry(t *testing.T) {
 
 func TestBckupAndLoad(t *testing.T) {
 
-	kv, err := InitKV("testDb", true)
+	kv, err := InitKV("testDb", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
 	err = kv.FillRan(5)
@@ -98,10 +107,10 @@ func TestBckupAndLoad(t *testing.T) {
 	err = kv.Backup("testBackup.dat")
 	if err != nil {t.Errorf("error -- Backup: %v", err)}
 
-	kvnew, err := InitKV("testDb", true)
+	kvnew, err := InitKV("testDb", false)
 	if err != nil {t.Errorf("error -- Load: %v", err)}
 
-	err = kvnew.Load("testBackup.dat")
+	err = kvnew.Load("azulkvBase.dat")
 	if err != nil {t.Errorf("error -- Load: %v", err)}
 
 	if (*kv.Entries) != (*kvnew.Entries) {t.Errorf("error entries do not match kv: %d kvnew: %d", (*kv.Entries), (*kvnew.Entries))}
@@ -110,11 +119,59 @@ func TestBckupAndLoad(t *testing.T) {
 			t.Errorf("error -- no key match at idx[%d] key: %s keynew: %s",i, (*kv.Keys)[i], (*kvnew.Keys)[i])
 		}
 	}
-	err = os.Remove("testDb/testBackup.dat")
-	if err != nil {t.Errorf("error -- Remove: %v", err)}
+//	err = os.Remove("testDb/testBackup.dat")
+//	if err != nil {t.Errorf("error -- Remove: %v", err)}
 
 }
 
-func Benchmarkxxx(b *testing.B) {
+func TestGet(t *testing.T) {
+
+	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+//	os.RemoveAll("testDb")
+	numEntries := 100
+	kv, err := InitKV("testDb", false)
+    if err != nil {t.Errorf("error -- InitKV: %v", err)}
+
+    err = kv.FillRan(numEntries)
+    if err != nil {t.Errorf("error -- FillRan: %v", err)}
+
+    err = kv.Backup("testBackup.dat")
+    if err != nil {t.Errorf("error -- Backup: %v", err)}
+
+		kidx := seededRand.Intn(numEntries)
+		keyStr := (*kv.Keys)[kidx]
+		idx, valstr := kv.GetVal(keyStr)
+		if idx != kidx  {t.Errorf("values do not agree: %d is not %d!", kidx, idx)}
+		if len(valstr) < 1 {t.Errorf("invalid valstr!")}
 
 }
+
+
+func BenchmarkGet(b *testing.B) {
+
+	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	os.RemoveAll("testDbNew")
+
+	numEntries := 100
+	kv, err := InitKV("testDbNew", false)
+    if err != nil {log.Fatalf("error -- InitKV: %v", err)}
+
+    err = kv.FillRan(numEntries)
+    if err != nil {log.Fatalf("error -- FillRan: %v", err)}
+
+//    err = kv.Backup("testDbNew_Backup.dat")
+//    if err != nil {log.Fatalf("error -- Backup: %v", err)}
+
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		kidx := seededRand.Intn(numEntries)
+		keyStr := (*kv.Keys)[kidx]
+		idx, valstr := kv.GetVal(keyStr)
+		if idx != kidx  {log.Fatalf("values do not agree[%d]: %d is not %d!", n, kidx, idx)}
+		if len(valstr) < 1 {log.Fatalf("invalid valstr!")}
+	}
+}
+
