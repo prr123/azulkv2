@@ -86,7 +86,7 @@ func InitKV(dirPath string, dbg bool) (dbpt *KvObj, err error){
             return nil, fmt.Errorf("could not open dir: %v", err)
         }
     }
-    log.Printf("azulkv dir exists!\n")
+    if dbg {log.Printf("azulkv dir exists!\n")}
 
     db.DirPath = dirPath
 	dbp := &db
@@ -293,22 +293,22 @@ func (dbp *KvObj) Backup (tabNam string) (err error){
 //    if err != nil {log.Fatalf("error -- InitKV: %v", err)}
 	numEntries := *db.Entries
 	dirPath := db.DirPath
+
 	filPath := dirPath + "/" + tabNam
 	if len(dirPath) == 0 {return fmt.Errorf("DirPath not found!")}
     _, err = os.Stat(filPath)
     if err == nil {
+		// todo add timestamp to filnam if fil already exists!
 		return fmt.Errorf("table %s already exists!: %v", tabNam, err)
     }
 
-	//create table
-	outfil, err:= os.Create(filPath)
-	defer outfil.Close()
-	if err != nil {return fmt.Errorf("could not create table: %v", err)}
 
 	numEnt := uint32(numEntries)
 	backSize := 4 + int(unsafe.Sizeof(numEnt))*numEntries *2
 
-	bck := make([]byte, backSize, 4096)
+//  needs examination reg blocksize use!
+// fix problem: need to add size dynamically
+	bck := make([]byte, backSize, 4096*2)
 
 
 	pt := (*[4]byte)(unsafe.Pointer(&numEnt))[:]
@@ -342,11 +342,34 @@ func (dbp *KvObj) Backup (tabNam string) (err error){
 		copy(bck[start +int(klen):start+int(klen)+int(vlen)],val)
 //		fmt.Printf("klen: %d vlen: %d key: %s val %s\n", klen, vlen, string(key), string(val))
 		start = start + int(klen) + int(vlen)
+// increase slice if start > max
+		if (start + 1000)> cap(bck) {
+			log.Printf("cap: %d size: %d\n", cap(bck), start)
+			bck = append(bck, make([]byte, 4096)...)
+		}
 	}
 	endpt := start
 //	fmt.Printf("endpt: %d\n",endpt)
+
+	//create table
+	outfil, err:= os.Create(filPath)
+	if err != nil {return fmt.Errorf("could not create table: %v", err)}
+
 	_, err = outfil.Write(bck[:endpt])
+	outfil.Close()
 	if err !=nil {return fmt.Errorf("backup write: %v", err)}
+
+	// first we rename the existing file
+
+	origFilPath := dirPath + "/azulkvBase.dat"
+	newFilPath := dirPath + "/azulkvBaseOld.dat"
+
+	err = os.Rename(origFilPath, newFilPath)
+    if err != nil {return fmt.Errorf("rename org file: %v", err)}
+
+	err = os.Rename(filPath, origFilPath)
+    if err != nil {return fmt.Errorf("rename backup file: %v", err)}
+
 	return nil
 }
 
@@ -373,6 +396,12 @@ func (dbp *KvObj) Load(tabNam string) (err error){
 	numKeys := int(numEntries)
 	(*db.Entries) = numKeys
 
+	// no need to read keys if there are no entries
+	if numKeys == 0 {
+	    dbp = &db
+		return nil
+	}
+
 	entries := make([]uint32, numKeys)
 
 	for i:=0; i< numKeys; i++ {
@@ -394,11 +423,6 @@ func (dbp *KvObj) Load(tabNam string) (err error){
 			Idx: i,
 		}
 		*db.HashList = append(*db.HashList, h)
-
-//		(*db.Keys)[i] = string(key)
-//		(*db.Vals)[i] = string(val)
-//		(*db.HashList)[i].Hash = GetHash(key)
-//		(*db.HashList)[i].Idx = i
 
 //		fmt.Printf("klen: %d vlen: %d key: %s val %s\n", klen, vlen, string(key), string(val))
 	}
