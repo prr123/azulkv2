@@ -4,41 +4,54 @@ import (
 //	"log"
 //	"fmt"
 	"testing"
-//	"os"
+	"os"
 //    "math/rand"
 //    "time"
 )
 
 func TestDb(t* testing.T) {
 
-	db, err := InitDb("testDb", "tstdb.db", false)
+	dbobj, err := InitDb("testDb", "tstdb.db", false)
 	if err != nil {t.Errorf("error -- InitDb: %v", err)}
 
-	err = db.CloseDb()
+	err = dbobj.CloseDb()
 	if err != nil {t.Errorf("error -- CloseDb: %v", err)}
 
 }
 
-/*
-//func TestAddEntry(t *testing.T) {
+
+func TestAddEntry(t *testing.T) {
 
 	_, err := os.Stat("testDb")
 	if err == nil {
 		err1 := os.RemoveAll("testDb")
 		if err1 != nil {t.Errorf("error -- could not remove files: %v", err1)}
 	}
-	db, err := InitDB("testDb", false)
+	dbobj, err := InitDb("testDb", "testDb.db", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
-//	dbtab := 
-	err = db.AddEntry("key1", "val1")
+	err = dbobj.AddEntry("key1", "val1")
 	if err != nil {t.Errorf("error -- AddEntry: %v", err)}
 
+	db := *dbobj
 
-	if db.Keys[0] != "key1" {t.Errorf("keys do not agree: %s is not %s!", (*kv.Keys)[0], "key1")}
+//	log.Printf("Entries: %d\n", *db.Entries)
+//	log.Printf("Entries: %d Keys[%d] %s\n", *db.Entries, len(*db.Keys), (*db.Keys)[*db.Entries -1])
+
+	if (*db.Keys)[0] != "key1" {t.Errorf("keys do not agree: %s is not %s!", (*db.Keys)[0], "key1")}
+
+	dbobj.PrintDb(0,1)
+
+	idx, valstr := dbobj.GetVal("key1")
+	if valstr != "val1" {t.Errorf("values do not agree: %s is not %s!", valstr, "val1")}
+	if idx != 0 {t.Errorf("idx is not 0: %d!",idx)}
+
+
+//	if idx<0 || idx>(*kv.Entries) {t.Errorf("invalid index: %d!",idx)}
 
 }
 
+/*
 func TestGetEntry(t *testing.T) {
 	kv, err := InitKV("testDb", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
