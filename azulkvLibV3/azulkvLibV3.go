@@ -29,16 +29,12 @@ type DbObj struct {
 	Dbg bool
 	TabNam string
 	Tab *os.File
-	Db *DB
-}
-
-type DB struct {
-	mDb sync.RWMutex
-	Entries int
-	Cap int
-	HashList []hash
-	Keys []string
-	Vals []string
+	mDb *sync.RWMutex
+	Entries *int
+	Cap *int
+	HashList *[]hash
+	Keys *[]string
+	Vals *[]string
 }
 
 type hash struct {
@@ -51,59 +47,75 @@ func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
 	if len(dirPath) == 0 {return nil, fmt.Errorf("no dirPath")}
 	if len(tbNam) == 0 {return nil, fmt.Errorf("no tbNam")}
 
-	db := DB {
-		Cap: 500,
-	}
 
-	dbobj := DbObj {
+	db := DbObj {
 		Dbg: dbg,
-		Db: &db,
 	}
 
+	itmp:=0
+	db.Entries = &itmp
 
-	db.Entries = 0
-	capacity := db.Cap
-	db.HashList = make([]hash,0, capacity)
-	db.Keys = make([]string, 0, capacity)
-	db.Vals = make([]string,0, capacity)
+	capacity := 500
+	db.Cap = &capacity
+
+	hash :=make([]hash,0, capacity)
+	db.HashList = &hash
+	keys :=make([]string, 0, capacity)
+	db.Keys = &keys
+	vals :=make([]string,0, capacity)
+	db.Vals = &vals
 
     // find dir
-    _, err = os.Stat(dirPath)
 	tabPath := dirPath + "/" + tbNam
+
+    _, err = os.Stat(dirPath)
     if err != nil {
         if os.IsNotExist(err) {
-            if dbg {log.Printf("db dir does not exist!\n")}
+//            if dbg {log.Printf("db dir does not exist!\n")}
+            log.Printf("db dir does not exist!\n")
 
             //create directory
            	if  err1 := os.Mkdir(dirPath, 0755); err1 != nil {return nil, fmt.Errorf("could not create dir: %v", err1)}
 
-            dbobj.DirPath = dirPath
-
-            //create files
-
-            outfil, err1:= os.Create(tabPath)
-			defer outfil.Close()
-            if err1 != nil {return nil, fmt.Errorf("could not create table: %v", err1)}
-            dbobj.Tab=outfil
-            dbobj.TabNam = tbNam
-
-			initData := make([]byte,4)
-			_, err = outfil.Write(initData[:])
-			if err !=nil {return nil, fmt.Errorf("init write: %v", err)}
-			return &dbobj, nil
         } else {
             return nil, fmt.Errorf("could not open dir: %v", err)
         }
     }
-    if dbg {log.Printf("azulkv dir exists!\n")}
 
-    dbobj.DirPath = dirPath
-    dbobj.TabNam = tbNam
+	log.Println("checking db file!")
+    _, err = os.Stat(tabPath)
+    if err != nil {
+        if os.IsNotExist(err) {
+            //create files
+			log.Printf("creating new db: %s\n",tabPath)
+            outfil, err1:= os.Create(tabPath)
+            if err1 != nil {return nil, fmt.Errorf("could not create table: %v", err1)}
+            db.Tab=outfil
+            db.TabNam = tbNam
+			initData := make([]byte,4)
+			_, err = outfil.Write(initData[:])
+			if err !=nil {return nil, fmt.Errorf("init write: %v", err)}
 
-	dbp := &dbobj
+			outfil.Close()
+
+		    db.DirPath = dirPath
+    		db.TabNam = tbNam
+
+			dbp := &db
+			return dbp, nil
+
+        } else {
+            return nil, fmt.Errorf("could not open db file: %v", err)
+        }
+	}
+
+    db.DirPath = dirPath
+    db.TabNam = tbNam
+
+	dbp := &db
 
 	err = dbp.Load(tbNam)
-	if err != nil {return nil, fmt.Errorf("could not load table %s: %v", dbobj.TabNam, err)}
+	if err != nil {return nil, fmt.Errorf("could not load table %s: %v", dbp.TabNam, err)}
 
 	return dbp, nil
 }
@@ -111,7 +123,9 @@ func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
 func (dbpt *DbObj) CloseDb () (err error){
 
 	tabnam := dbpt.TabNam
+
 	if len(tabnam) == 0 {tabnam = "dbClose.dat"}
+
 	err = dbpt.Backup(tabnam)
 	return err
 }
@@ -165,13 +179,15 @@ func (dbpt *DbObj) FillRan (level int) (err error){
 //fmt.Printf("fil db: %v\n", dbpt)
 	return nil
 }
-
+*/
 
 func (dbp *DbObj) AddEntry (key, val string) (err error){
 
 	db := *dbp
-	idx := (*db.Entries)
-	if idx > db.Cap-2 {return fmt.Errorf("entry exceeds limits")}
+
+	idx := *db.Entries
+
+	if idx > (*db.Cap)-2 {return fmt.Errorf("entry exceeds limits")}
 
 	hashval := GetHash([]byte(key))
 	hashdat := hash {
@@ -189,11 +205,16 @@ func (dbp *DbObj) AddEntry (key, val string) (err error){
 //	(*db.Vals)[idx] = val
 
 	(*db.Entries)++
+
+//	log.Printf(" %d: keys[%d]\n", *db.Entries,len(*db.Keys))
+
 	dbp = &db
+
+//	log.Printf("db: %v\n", (*dbp)
 
 	return nil
 }
-
+/*
 func (dbp *DbObj) UpdEntry (key, val string) (idx int){
 	db := *dbp
 	for i:=0; i< (*db.Entries); i++ {
@@ -228,12 +249,14 @@ func (dbp *DbObj) DelEntry (idx int) (err error){
 
 	return nil
 }
+*/
 
 func (dbp *DbObj) GetVal (keyStr string) (idx int, valstr string){
 
 	db := *dbp
+
 	idx = -1
-	for i:=0; i< (*db.Entries); i++ {
+	for i:=0; i< *db.Entries; i++ {
 		if (*db.Keys)[i] == keyStr {
 			idx = i
 			valstr = (*db.Vals)[i]
@@ -243,6 +266,7 @@ func (dbp *DbObj) GetVal (keyStr string) (idx int, valstr string){
 	return idx, ""
 }
 
+/*
 func (dbp *DbObj) GetValByIdx (idx int)(valstr string, err error){
 
 	db := *dbp
@@ -309,12 +333,11 @@ func (dbP *DbObj) Clean () (err error){
 
 func (dbp *DbObj) Backup (tabNam string) (err error){
 
-    dbobj := *dbp
-	db := *dbobj.Db
+    db := *dbp
 //    kvMap, err := InitKV("testDb", true)
 //    if err != nil {log.Fatalf("error -- InitKV: %v", err)}
-	numEntries := db.Entries
-	dirPath := dbobj.DirPath
+	numEntries := *db.Entries
+	dirPath := db.DirPath
 
 	if len(dirPath) == 0 {return fmt.Errorf("DirPath not found!")}
 
@@ -373,23 +396,23 @@ func (dbp *DbObj) Backup (tabNam string) (err error){
 
 	start = numEntries*4 + 4
 	for i:=0; i<numEntries; i++ {
-		klen := uint16(len(db.Keys[i]))
+		klen := uint16(len((*db.Keys)[i]))
 		pt := (*[2]byte)(unsafe.Pointer(&klen))[:]
 		copy(bck[start:start+2], pt)
-		vlen := uint16(len(db.Vals[i]))
+		vlen := uint16(len((*db.Vals)[i]))
 		pt2 := (*[2]byte)(unsafe.Pointer(&vlen))[:]
 		copy(bck[start+2:start+4], pt2)
 		start = start + 4
 //		fmt.Printf("  %d: kl %d vl %d\n",i, klen, vlen)
-		key := []byte(db.Keys[i])
+		key := []byte((*db.Keys)[i])
 		copy(bck[start:start+int(klen)],key)
-		val := []byte(db.Vals[i])
+		val := []byte((*db.Vals)[i])
 		copy(bck[start +int(klen):start+int(klen)+int(vlen)],val)
 //		fmt.Printf("klen: %d vlen: %d key: %s val %s\n", klen, vlen, string(key), string(val))
 		start = start + int(klen) + int(vlen)
 // increase slice if start > max
 		if (start + 1000)> cap(bck) {
-			log.Printf("cap: %d size: %d\n", cap(bck), start)
+//			log.Printf("cap: %d size: %d\n", cap(bck), start)
 			bck = append(bck, make([]byte, 4096)...)
 		}
 	}
@@ -419,11 +442,10 @@ func (dbp *DbObj) Backup (tabNam string) (err error){
 func (dbp *DbObj) Load(tabNam string) (err error){
 	var numEntries uint32
 
-    dbobj := *dbp
-	db := *dbobj.Db
+    db := *dbp
 //	capacity := db.Cap
 
-	dirPath := dbobj.DirPath
+	dirPath := db.DirPath
 	filPath := dirPath + "/" + tabNam
 	log.Printf("load: %s\n", filPath)
 
@@ -432,18 +454,17 @@ func (dbp *DbObj) Load(tabNam string) (err error){
 
 	siz := len(bckup)
 
-//	fmt.Printf("backup: %d\n",siz)
+	fmt.Printf("backup: %d\n",siz)
 
 	if siz < 4 {return fmt.Errorf("no valid numEntries found!")}
 
 	numEntries = *(*uint32)(unsafe.Pointer(&bckup[0]))
 	numKeys := int(numEntries)
-	db.Entries = numKeys
+	db.Entries = &numKeys
 
 	// no need to read keys if there are no entries
 	if numKeys == 0 {
-		dbobj.Db = &db
-	    dbp = &dbobj
+	    dbp = &db
 		return nil
 	}
 
@@ -461,18 +482,17 @@ func (dbp *DbObj) Load(tabNam string) (err error){
 		key := bckup[start +4: start+4+int(klen)]
 		val := bckup[start +4 + int(klen): start+4+int(klen)+int(vlen)]
 		start = start + 4 + int(klen) + int(vlen)
-		db.Keys = append(db.Keys,string(key))
-		db.Vals = append(db.Vals,string(val))
+		*db.Keys = append(*db.Keys,string(key))
+		*db.Vals = append(*db.Vals,string(val))
 		h := hash {
 			Hash: GetHash(key),
 			Idx: i,
 		}
-		db.HashList = append(db.HashList, h)
+		*db.HashList = append(*db.HashList, h)
 
 //		fmt.Printf("klen: %d vlen: %d key: %s val %s\n", klen, vlen, string(key), string(val))
 	}
-    dbobj.Db = &db
-	dbp = &dbobj
+	dbp = &db
 	return nil
 }
 
@@ -503,20 +523,21 @@ func (dbp *DbObj) SortHash(){
 
 func (dbpt *DbObj) PrintDb (idx int, num int) {
 
-	db := (*dbpt).Db
+	db := *dbpt
     fmt.Printf("************ AzulDb *********\n")
-    fmt.Printf("Dir:    %s\n",(*dbpt).DirPath)
-    fmt.Printf("Table:  %s\n",(*dbpt).TabNam)
+    fmt.Printf("Dir:    %s\n",db.DirPath)
+    fmt.Printf("Table:  %s\n",db.TabNam)
     fmt.Printf("********* End AzulKV *******\n")
 
 	fmt.Printf("********* Entries: %d *************\n", (db.Entries))
-	if idx+num > db.Entries {
-		fmt.Printf("invalid idx; idx + num > %d!\n", db.Entries)
-		return
+	end := idx+num
+	if end > *db.Entries {
+		fmt.Printf("invalid idx; idx + num [%d] > entires: %d!\n", idx+num, *db.Entries)
+		end = *db.Entries
 	}
 	fmt.Println("  i  Idx  Hash    Key   Value")
-	for i:=idx; i<idx + num; i++ {
-		fmt.Printf("  [%2d]: %d %20s %s\n", i, db.HashList[i].Hash, db.Keys[i], db.Vals[i])
+	for i:=idx; i<end; i++ {
+		fmt.Printf("  [%2d]: %d %20s %s\n", i, (*db.HashList)[i].Hash, (*db.Keys)[i], (*db.Vals)[i])
 	}
 	fmt.Printf("********* End Entries *************\n")
 	return
