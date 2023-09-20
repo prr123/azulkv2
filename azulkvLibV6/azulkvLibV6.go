@@ -21,7 +21,6 @@ import (
 //	"sync/atomic"
 //	"sort"
 
-	"github.com/dgryski/go-t1ha"
 )
 
 type DbObj struct {
@@ -32,14 +31,8 @@ type DbObj struct {
 	mDb sync.RWMutex
 	Entries int
 	Cap int
-	HashList []hash
 	Keys []string
 	Vals []string
-}
-
-type hash struct {
-	Hash uint64
-	Idx int
 }
 
 func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
@@ -51,10 +44,9 @@ func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
 	db := DbObj {
 		Dbg: dbg,
 		Entries: 0,
-		Cap: 500,
+		Cap: 1500,
 	}
 
-	db.HashList = make([]hash, db.Cap)
 	db.Keys = make([]string, db.Cap)
 	db.Vals = make([]string, db.Cap)
 
@@ -75,7 +67,7 @@ func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
         }
     }
 
-	log.Println("checking db file!")
+//	log.Println("checking db file!")
     _, err = os.Stat(tabPath)
     if err != nil {
         if os.IsNotExist(err) {
@@ -120,14 +112,6 @@ func (db *DbObj) CloseDb () (err error){
 	return err
 }
 
-func GetHash(bdat []byte) (hash uint64) {
-
-	seed :=uint64(0)
-	hash = t1ha.Sum64(bdat, seed)
-
-	return hash
-}
-
 func GenRanData (rangeStart, rangeEnd int) (bdat []byte) {
 
 	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -147,17 +131,12 @@ func GenRanData (rangeStart, rangeEnd int) (bdat []byte) {
 
 func (db *DbObj) FillRan (level int) (err error){
 
-	h := hash {}
 	for i:=0; i<level; i++ {
 		bdat := GenRanData(5, 25)
-		hashval := GetHash(bdat)
 		valdat := GenRanData(5, 40)
 		valstr := fmt.Sprintf("val-%d_%s",i,string(valdat))
 //		valb := []byte(valstr)
 		db.Keys[i] = string(bdat)
-		h.Idx = i
-		h.Hash = hashval
-		db.HashList[i] = h
 		db.Vals[i] = valstr
 //		fmt.Printf(" %d: %d %s %s\n", i, (*db.Hash)[i], (*db.Keys)[i], (*db.Vals)[i])
 	}
@@ -173,21 +152,12 @@ func (db *DbObj) AddEntry (key, val string) (err error){
 	if idx >= 0 {return fmt.Errorf("key exists!")}
 
 	if db.Entries > db.Cap-50 {
-		hashList := make([]hash, 100)
-		db.HashList = append(db.HashList, hashList...)
 		db.Keys = append(db.Keys, make([]string,100)...)
 		db.Vals = append(db.Vals, make([]string,100)...)
 		db.Cap += 100
 	}
 
-	hashval := GetHash([]byte(key))
-	hashdat := hash {
-			Hash: hashval,
-			Idx: db.Entries,
-	}
-
 	nidx := db.Entries
-	db.HashList[nidx]  = hashdat
 
 	db.Keys[nidx] = key
 	db.Vals[nidx] = val
@@ -220,8 +190,6 @@ func (db *DbObj) UpdEntryByIdx (idx int, val string) (err error){
 func (db *DbObj) DelEntry (idx int) (err error){
 
 	if idx > db.Cap {return fmt.Errorf("invalid index")}
-	db.HashList[idx].Hash = 0
-	db.HashList[idx].Idx = 0
 	db.Keys[idx] = ""
 	db.Vals[idx] = ""
 	return nil
@@ -249,33 +217,6 @@ func (db *DbObj) GetValByIdx (idx int)(valstr string, err error){
 	return valstr, nil
 }
 
-func (db *DbObj) GetValByHash (hash uint64) (idx int, valstr string){
-
-//	hashval := GetHash([]byte(key))
-
-	for i:=0; i< db.Entries; i++ {
-		if db.HashList[i].Hash == hash {
-			idx = i
-			valstr = db.Vals[i]
-			return idx, valstr
-		}
-	}
-	return -1, ""
-}
-
-func (db *DbObj) FindKeyByHash (key string) (idx int){
-
-	hashval := GetHash([]byte(key))
-
-	for i:=0; i< db.Entries; i++ {
-		if db.HashList[i].Hash == hashval {
-			idx = i
-			return idx
-		}
-	}
-	return -1
-}
-
 
 func (db *DbObj) FindKey (keyStr string) (idx int) {
 
@@ -299,13 +240,7 @@ func (db *DbObj) GetKeyByIdx (idx int) (key string) {
 
 func (db *DbObj) Clean () {
 
-	h:= hash{
-		Hash: 0,
-		Idx: 0,
-		}
-
 	for i:=0; i< db.Entries; i++ {
-		db.HashList[i] = h
 		db.Keys[i] = ""
 		db.Vals[i] = ""
 	}
@@ -468,41 +403,12 @@ func (db *DbObj) Load(tabNam string) (err error){
 		start = start + 4 + int(klen) + int(vlen)
 		db.Keys[i] = string(key)
 		db.Vals[i] =string(val)
-		h := hash {
-			Hash: GetHash(key),
-			Idx: i,
-		}
-		db.HashList[i] = h
 
 //		fmt.Printf("klen: %d vlen: %d key: %s val %s\n", klen, vlen, string(key), string(val))
 	}
 	return nil
 }
 
-/*
-func (dbp *DbObj) SortHash(){
-
-    db := *dbp
-	num := (*db.Entries)
-	hashList := (*db.HashList)[:num]
-	for i:=0; i< len(hashList); i++ {
-		fmt.Printf("%d hash: %d idx: %d\n", i,hashList[i].Hash, hashList[i].Idx) 
-	}
-	fmt.Println("***")
-	sort.Slice(hashList, func(i, j int) bool {
-		return hashList[i].Hash < hashList[j].Hash
-	})
-
-	for i:=0; i< len(hashList); i++ {
-		fmt.Printf("%d hash: %d idx: %d\n", i,hashList[i].Hash, hashList[i].Idx) 
-	}
-	fmt.Println("***")
-
-	dbp.HashList = &hashList
-	dbp = &db
-}
-
-*/
 
 func (db *DbObj) PrintDb (idx int, num int) {
 
@@ -517,9 +423,9 @@ func (db *DbObj) PrintDb (idx int, num int) {
 		fmt.Printf("invalid idx; idx + num [%d] > entires: %d!\n", idx+num, db.Entries)
 		end = db.Entries
 	}
-	fmt.Println("  i  Idx  Hash    Key   Value")
+	fmt.Println("  i  Idx     Key   Value")
 	for i:=idx; i<end; i++ {
-		fmt.Printf("  [%2d]: %d %20s %s\n", i, db.HashList[i].Hash, db.Keys[i], db.Vals[i])
+		fmt.Printf("  [%2d]:  %20s %s\n", i, db.Keys[i], db.Vals[i])
 	}
 	fmt.Printf("********* End Entries *************\n")
 	return
@@ -533,9 +439,9 @@ func PrintDB (db *DbObj) {
     fmt.Printf("********* End AzulKV *******\n")
 
 	fmt.Printf("********* Entries: %d *************\n", (db.Entries))
-	fmt.Println("  i  Idx  Hash    Key   Value")
+	fmt.Println("  i  Idx      Key   Value")
 	for i:=0; i<db.Entries; i++ {
-		fmt.Printf("  [%2d]: %d %20s %s\n", i, db.HashList[i].Hash, db.Keys[i], db.Vals[i])
+		fmt.Printf("  [%2d]: %20s %s\n", i, db.Keys[i], db.Vals[i])
 	}
 	fmt.Printf("********* End Entries *************\n")
 	return
