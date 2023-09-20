@@ -14,8 +14,10 @@ func TestDb(t* testing.T) {
 	dbobj, err := InitDb("testDb", "tstdb.db", false)
 	if err != nil {t.Errorf("error -- InitDb: %v", err)}
 
+//	log.Println("Closing")
 	err = dbobj.CloseDb()
 	if err != nil {t.Errorf("error -- CloseDb: %v", err)}
+//	log.Println("End Closing")
 
 }
 
@@ -30,11 +32,14 @@ func TestAddEntry(t *testing.T) {
 	db, err := InitDb("testDb", "testDb.db", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
-//	log.Println("*** after initdb ****")
+//	log.Println("*** initdb completed ****")
 //	db.PrintDb(0,db.Entries)
+	db.Clean()
+//	log.Println("*** db cleaned ****")
 
 	err = db.AddEntry("key1", "val1")
 	if err != nil {t.Errorf("error -- AddEntry: %v", err)}
+//	log.Println("addentry completed")
 
 //	log.Println("*** after AddEntry ****")
 //	db.PrintDb(0,db.Entries)
@@ -86,7 +91,6 @@ func TestUpdEntry(t *testing.T) {
 	db, err := InitDb("testDb", "testDb.db", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
-	db.Clean()
 	err = db.AddEntry("key1", "val1")
 	if err != nil {t.Errorf("error -- AddEntry: %v", err)}
 
@@ -197,14 +201,101 @@ func TestBckupAndLoad(t *testing.T) {
 
 
 
-func BenchmarkGet(b *testing.B) {
+func BenchmarkGet100(b *testing.B) {
 
 	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	os.RemoveAll("testDbNew")
 
 	numEntries := 100
-	db, err := InitDb("testDb", "testDb.db", false)
+	db, err := InitDb("testDb", "testDb100.db", false)
+	if err != nil {log.Fatalf("error -- InitDb: %v", err)}
+
+	db.Clean()
+
+    err = db.FillRan(numEntries)
+    if err != nil {log.Fatalf("error -- FillRan: %v", err)}
+
+//    err = kv.Backup("testDbNew_Backup.dat")
+//    if err != nil {log.Fatalf("error -- Backup: %v", err)}
+
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		kidx := seededRand.Intn(numEntries)
+		keyStr := db.Keys[kidx]
+		idx, valstr := db.GetVal(keyStr)
+		if idx != kidx  {log.Fatalf("values do not agree[%d]: %d is not %d!", n, kidx, idx)}
+		if len(valstr) < 1 {log.Fatalf("invalid valstr!")}
+	}
+}
+
+func BenchmarkGet200(b *testing.B) {
+
+	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	os.RemoveAll("testDbNew")
+
+	numEntries := 200
+	db, err := InitDb("testDb", "testDb200.db", false)
+	if err != nil {log.Fatalf("error -- InitDb: %v", err)}
+
+	db.Clean()
+
+    err = db.FillRan(numEntries)
+    if err != nil {log.Fatalf("error -- FillRan: %v", err)}
+
+//    err = kv.Backup("testDbNew_Backup.dat")
+//    if err != nil {log.Fatalf("error -- Backup: %v", err)}
+
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		kidx := seededRand.Intn(numEntries)
+		keyStr := db.Keys[kidx]
+		idx, valstr := db.GetVal(keyStr)
+		if idx != kidx  {log.Fatalf("values do not agree[%d]: %d is not %d!", n, kidx, idx)}
+		if len(valstr) < 1 {log.Fatalf("invalid valstr!")}
+	}
+}
+
+func BenchmarkGet500(b *testing.B) {
+
+	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	os.RemoveAll("testDbNew")
+
+	numEntries := 500
+	db, err := InitDb("testDb", "testDb500.db", false)
+	if err != nil {log.Fatalf("error -- InitDb: %v", err)}
+
+	db.Clean()
+
+    err = db.FillRan(numEntries)
+    if err != nil {log.Fatalf("error -- FillRan: %v", err)}
+
+//    err = kv.Backup("testDbNew_Backup.dat")
+//    if err != nil {log.Fatalf("error -- Backup: %v", err)}
+
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		kidx := seededRand.Intn(numEntries)
+		keyStr := db.Keys[kidx]
+		idx, valstr := db.GetVal(keyStr)
+		if idx != kidx  {log.Fatalf("values do not agree[%d]: %d is not %d!", n, kidx, idx)}
+		if len(valstr) < 1 {log.Fatalf("invalid valstr!")}
+	}
+}
+
+func BenchmarkGet1000(b *testing.B) {
+
+	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	os.RemoveAll("testDbNew")
+
+	numEntries := 1000
+	db, err := InitDb("testDb", "testDb1000.db", false)
 	if err != nil {log.Fatalf("error -- InitDb: %v", err)}
 
 	db.Clean()
