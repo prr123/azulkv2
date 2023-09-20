@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"sync"
 	"unsafe"
+
 //	"sync/atomic"
 //	"sort"
 
@@ -30,7 +31,7 @@ type DbObj struct {
 	Dbg bool
 	TabNam string
 	Tab *os.File
-	mDb sync.RWMutex
+	mut *sync.RWMutex
 	Entries int
 	Cap int
 	HashList []hash
@@ -48,11 +49,13 @@ func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
 	if len(dirPath) == 0 {return nil, fmt.Errorf("no dirPath")}
 	if len(tbNam) == 0 {return nil, fmt.Errorf("no tbNam")}
 
+	var mutex sync.RWMutex
 
 	db := DbObj {
 		Dbg: dbg,
 		Entries: 0,
-		Cap: 500,
+		Cap: 1500,
+		mut: &mutex,
 	}
 
 	db.HashList = make([]hash, db.Cap)
@@ -76,12 +79,12 @@ func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
         }
     }
 
-	log.Println("checking db file!")
+	if db.Dbg {log.Println("checking db file!")}
     _, err = os.Stat(tabPath)
     if err != nil {
         if os.IsNotExist(err) {
             //create files
-			log.Printf("creating new db: %s\n",tabPath)
+			if db.Dbg {log.Printf("creating new db: %s\n",tabPath)}
             outfil, err1:= os.Create(tabPath)
             if err1 != nil {return nil, fmt.Errorf("could not create table: %v", err1)}
             db.Tab=outfil
@@ -105,8 +108,10 @@ func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
     db.TabNam = tbNam
 	dbp := &db
 
+//log.Println("load")
 	err = dbp.Load(tbNam)
 	if err != nil {return nil, fmt.Errorf("could not load table %s: %v", dbp.TabNam, err)}
+//log.Println("finished load")
 
 	return dbp, nil
 }
@@ -173,6 +178,8 @@ func (db *DbObj) AddEntry (key, val string) (err error){
 	idx := db.FindKey(key)
 	if idx >= 0 {return fmt.Errorf("key exists!")}
 
+	(*db).mut.Lock()
+	defer (*db).mut.Unlock()
 	if db.Entries > db.Cap-50 {
 		hashList := make([]hash, 100)
 		db.HashList = append(db.HashList, hashList...)
@@ -201,6 +208,8 @@ func (db *DbObj) AddEntry (key, val string) (err error){
 
 func (db *DbObj) UpdEntry (key, val string) (idx int){
 
+	(*db).mut.Lock()
+	defer (*db).mut.Unlock()
 	for i:=0; i< db.Entries; i++ {
 		if db.Keys[i] == key {
 			idx = i
@@ -214,23 +223,29 @@ func (db *DbObj) UpdEntry (key, val string) (idx int){
 func (db *DbObj) UpdEntryByIdx (idx int, val string) (err error){
 
 	if idx < 0 ||idx > db.Entries {return fmt.Errorf("invalid index")}
+	(*db).mut.Lock()
 	db.Vals[idx] = val
+	(*db).mut.Unlock()
 	return nil
 }
 
 func (db *DbObj) DelEntry (idx int) (err error){
 
 	if idx > db.Cap {return fmt.Errorf("invalid index")}
+	(*db).mut.Lock()
 	db.HashList[idx].Hash = 0
 	db.HashList[idx].Idx = 0
 	db.Keys[idx] = ""
 	db.Vals[idx] = ""
+	(*db).mut.Unlock()
 	return nil
 }
 
 
 func (db *DbObj) GetVal (keyStr string) (idx int, valstr string){
 
+	(*db).mut.RLock()
+	defer (*db).mut.RUnlock()
 	idx = -1
 	for i:=0; i< db.Entries; i++ {
 		if db.Keys[i] == keyStr {
@@ -246,7 +261,9 @@ func (db *DbObj) GetVal (keyStr string) (idx int, valstr string){
 func (db *DbObj) GetValByIdx (idx int)(valstr string, err error){
 
 	if idx < 0 || idx > db.Entries {return "", fmt.Errorf("not a valid index!")}
+	(*db).mut.RLock()
 	valstr = db.Vals[idx]
+	(*db).mut.RUnlock()
 	return valstr, nil
 }
 
@@ -254,13 +271,16 @@ func (db *DbObj) GetValByHash (hash uint64) (idx int, valstr string){
 
 //	hashval := GetHash([]byte(key))
 
+	(*db).mut.RLock()
 	for i:=0; i< db.Entries; i++ {
 		if db.HashList[i].Hash == hash {
 			idx = i
 			valstr = db.Vals[i]
+			(*db).mut.RUnlock()
 			return idx, valstr
 		}
 	}
+	(*db).mut.RUnlock()
 	return -1, ""
 }
 
@@ -268,24 +288,30 @@ func (db *DbObj) FindKeyByHash (key string) (idx int){
 
 	hashval := GetHash([]byte(key))
 
+	(*db).mut.RLock()
 	for i:=0; i< db.Entries; i++ {
 		if db.HashList[i].Hash == hashval {
 			idx = i
+			(*db).mut.RUnlock()
 			return idx
 		}
 	}
+	(*db).mut.RUnlock()
 	return -1
 }
 
 
 func (db *DbObj) FindKey (keyStr string) (idx int) {
 
+	(*db).mut.RLock()
 	for i:=0; i< db.Entries; i++ {
 		if db.Keys[i] == keyStr {
 			idx = i
+			(*db).mut.RUnlock()
 			return idx
 		}
 	}
+	(*db).mut.RUnlock()
 	return -1
 }
 
@@ -294,7 +320,9 @@ func (db *DbObj) GetKeyByIdx (idx int) (key string) {
 
 	if idx > db.Entries {return ""}
 
+	(*db).mut.RLock()
 	key = db.Keys[idx]
+	(*db).mut.RUnlock()
 	return key
 }
 
@@ -305,18 +333,21 @@ func (db *DbObj) Clean () {
 		Idx: 0,
 		}
 
+	(*db).mut.Lock()
 	for i:=0; i< db.Entries; i++ {
 		db.HashList[i] = h
 		db.Keys[i] = ""
 		db.Vals[i] = ""
 	}
 	db.Entries = 0
+	(*db).mut.Unlock()
 	return
 }
 
 
 func (db *DbObj) Backup (tabNam string) (err error){
 
+	(*db).mut.RLock()
 	numEntries := db.Entries
 	dirPath := db.DirPath
 //	log.Printf("backup dirPath: %s\n", dirPath)
@@ -398,6 +429,8 @@ func (db *DbObj) Backup (tabNam string) (err error){
 			bck = append(bck, make([]byte, 4096)...)
 		}
 	}
+
+	(*db).mut.RUnlock()
 	endpt := start
 //	fmt.Printf("endpt: %d\n",endpt)
 
@@ -441,6 +474,10 @@ func (db *DbObj) Load(tabNam string) (err error){
 
 	numEntries = *(*uint32)(unsafe.Pointer(&bckup[0]))
 	numKeys := int(numEntries)
+
+	(*db).mut.Lock()
+//log.Println("load locking")
+	defer (*db).mut.Unlock()
 	db.Entries = numKeys
 
 	// no need to read keys if there are no entries
