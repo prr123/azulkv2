@@ -34,14 +34,7 @@ type DbObj struct {
 	mut *sync.RWMutex
 	Entries int
 	Cap int
-	HashList []hash
-	Keys []string
-	Vals []string
-}
-
-type hash struct {
-	Hash uint64
-	Idx int
+	KV map[string]string
 }
 
 func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
@@ -50,17 +43,16 @@ func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
 	if len(tbNam) == 0 {return nil, fmt.Errorf("no tbNam")}
 
 	var mutex sync.RWMutex
+	kv := make(map[string]string)
+
 
 	db := DbObj {
 		Dbg: dbg,
 		Entries: 0,
 		Cap: 1500,
 		mut: &mutex,
+		KV: kv,
 	}
-
-	db.HashList = make([]hash, db.Cap)
-	db.Keys = make([]string, db.Cap)
-	db.Vals = make([]string, db.Cap)
 
     // find dir
 	tabPath := dirPath + "/" + tbNam
@@ -153,19 +145,11 @@ func GenRanData (rangeStart, rangeEnd int) (bdat []byte) {
 
 func (db *DbObj) FillRan (level int) (err error){
 
-	h := hash {}
 	for i:=0; i<level; i++ {
 		bdat := GenRanData(5, 25)
-		hashval := GetHash(bdat)
 		valdat := GenRanData(5, 40)
 		valstr := fmt.Sprintf("val-%d_%s",i,string(valdat))
-//		valb := []byte(valstr)
-		db.Keys[i] = string(bdat)
-		h.Idx = i
-		h.Hash = hashval
-		db.HashList[i] = h
-		db.Vals[i] = valstr
-//		fmt.Printf(" %d: %d %s %s\n", i, (*db.Hash)[i], (*db.Keys)[i], (*db.Vals)[i])
+		db.KV[string(bdat)] = valstr
 	}
 	db.Entries = level
 //fmt.Printf("fil db: %v\n", dbpt)
@@ -175,172 +159,68 @@ func (db *DbObj) FillRan (level int) (err error){
 
 func (db *DbObj) AddEntry (key, val string) (err error){
 
-	idx := db.FindKey(key)
-	if idx >= 0 {return fmt.Errorf("key exists!")}
 
 	(*db).mut.Lock()
 	defer (*db).mut.Unlock()
-	if db.Entries > db.Cap-50 {
-		hashList := make([]hash, 100)
-		db.HashList = append(db.HashList, hashList...)
-		db.Keys = append(db.Keys, make([]string,100)...)
-		db.Vals = append(db.Vals, make([]string,100)...)
-		db.Cap += 100
-	}
-
-	hashval := GetHash([]byte(key))
-	hashdat := hash {
-			Hash: hashval,
-			Idx: db.Entries,
-	}
-
-	nidx := db.Entries
-	db.HashList[nidx]  = hashdat
-
-	db.Keys[nidx] = key
-	db.Vals[nidx] = val
-
+	db.KV[key] = val
 	db.Entries++
 
 	return nil
 }
 
 
-func (db *DbObj) UpdEntry (key, val string) (idx int){
+func (db *DbObj) UpdEntry (key, val string) (err error){
 
 	(*db).mut.Lock()
 	defer (*db).mut.Unlock()
-	for i:=0; i< db.Entries; i++ {
-		if db.Keys[i] == key {
-			idx = i
-			db.Vals[i] = val
-			return idx
-		}
-	}
-	return -1
-}
-
-func (db *DbObj) UpdEntryByIdx (idx int, val string) (err error){
-
-	if idx < 0 ||idx > db.Entries {return fmt.Errorf("invalid index")}
-	(*db).mut.Lock()
-	db.Vals[idx] = val
-	(*db).mut.Unlock()
-	return nil
-}
-
-func (db *DbObj) DelEntry (idx int) (err error){
-
-	if idx > db.Cap {return fmt.Errorf("invalid index")}
-	(*db).mut.Lock()
-	db.HashList[idx].Hash = 0
-	db.HashList[idx].Idx = 0
-	db.Keys[idx] = ""
-	db.Vals[idx] = ""
-	(*db).mut.Unlock()
+	_, ok := db.KV[key]
+	if !ok {return fmt.Errorf("key not valid!")}
+	db.KV[key] = val
 	return nil
 }
 
 
-func (db *DbObj) GetVal (keyStr string) (idx int, valstr string){
+func (db *DbObj) DelEntry (key string) (err error){
+
+	(*db).mut.Lock()
+	defer (*db).mut.Unlock()
+	_, ok := db.KV[key]
+	if !ok {return fmt.Errorf("key not valid!")}
+	delete(db.KV, key)
+
+	return nil
+}
+
+
+func (db *DbObj) GetVal (key string) (valstr string, err error){
 
 	(*db).mut.RLock()
 	defer (*db).mut.RUnlock()
-	idx = -1
+	val, ok := db.KV[key]
+	if !ok {return "", fmt.Errorf("key not valid!")}
+	return val, nil
+}
+
+
+func (db *DbObj) FindKey (key string) (err error) {
+
+	(*db).mut.RLock()
+	defer (*db).mut.RUnlock()
 	for i:=0; i< db.Entries; i++ {
-		if db.Keys[i] == keyStr {
-			idx = i
-			valstr = db.Vals[i]
-			return idx, valstr
-		}
+		_, ok := db.KV[key]
+		if !ok {return fmt.Errorf("key not valid!")}
 	}
-	return idx, ""
+	return nil
 }
 
-
-func (db *DbObj) GetValByIdx (idx int)(valstr string, err error){
-
-	if idx < 0 || idx > db.Entries {return "", fmt.Errorf("not a valid index!")}
-	(*db).mut.RLock()
-	valstr = db.Vals[idx]
-	(*db).mut.RUnlock()
-	return valstr, nil
-}
-
-func (db *DbObj) GetValByHash (hash uint64) (idx int, valstr string){
-
-//	hashval := GetHash([]byte(key))
-
-	(*db).mut.RLock()
-	for i:=0; i< db.Entries; i++ {
-		if db.HashList[i].Hash == hash {
-			idx = i
-			valstr = db.Vals[i]
-			(*db).mut.RUnlock()
-			return idx, valstr
-		}
-	}
-	(*db).mut.RUnlock()
-	return -1, ""
-}
-
-func (db *DbObj) FindKeyByHash (key string) (idx int){
-
-	hashval := GetHash([]byte(key))
-
-	(*db).mut.RLock()
-	for i:=0; i< db.Entries; i++ {
-		if db.HashList[i].Hash == hashval {
-			idx = i
-			(*db).mut.RUnlock()
-			return idx
-		}
-	}
-	(*db).mut.RUnlock()
-	return -1
-}
-
-
-func (db *DbObj) FindKey (keyStr string) (idx int) {
-
-	(*db).mut.RLock()
-	for i:=0; i< db.Entries; i++ {
-		if db.Keys[i] == keyStr {
-			idx = i
-			(*db).mut.RUnlock()
-			return idx
-		}
-	}
-	(*db).mut.RUnlock()
-	return -1
-}
-
-
-func (db *DbObj) GetKeyByIdx (idx int) (key string) {
-
-	if idx > db.Entries {return ""}
-
-	(*db).mut.RLock()
-	key = db.Keys[idx]
-	(*db).mut.RUnlock()
-	return key
-}
 
 func (db *DbObj) Clean () {
 
-	h:= hash{
-		Hash: 0,
-		Idx: 0,
-		}
-
 	(*db).mut.Lock()
-	for i:=0; i< db.Entries; i++ {
-		db.HashList[i] = h
-		db.Keys[i] = ""
-		db.Vals[i] = ""
+	defer (*db).mut.Unlock()
+	for k, _ := range(db.KV) {
+		delete(db.KV, k)
 	}
-	db.Entries = 0
-	(*db).mut.Unlock()
 	return
 }
 
@@ -348,7 +228,7 @@ func (db *DbObj) Clean () {
 func (db *DbObj) Backup (tabNam string) (err error){
 
 	(*db).mut.RLock()
-	numEntries := db.Entries
+	numEntries := len(db.KV)
 	dirPath := db.DirPath
 //	log.Printf("backup dirPath: %s\n", dirPath)
 
@@ -408,18 +288,19 @@ func (db *DbObj) Backup (tabNam string) (err error){
 	}
 
 	start = db.Entries*4 + 4
-	for i:=0; i<db.Entries; i++ {
-		klen := uint16(len(db.Keys[i]))
+	for keyStr, valStr := range(db.KV) {
+
+		klen := uint16(len(keyStr))
 		pt := (*[2]byte)(unsafe.Pointer(&klen))[:]
 		copy(bck[start:start+2], pt)
-		vlen := uint16(len(db.Vals[i]))
+		vlen := uint16(len(valStr))
 		pt2 := (*[2]byte)(unsafe.Pointer(&vlen))[:]
 		copy(bck[start+2:start+4], pt2)
 		start = start + 4
 //		fmt.Printf("  %d: kl %d vl %d\n",i, klen, vlen)
-		key := []byte(db.Keys[i])
+		key := []byte(keyStr)
 		copy(bck[start:start+int(klen)],key)
-		val := []byte(db.Vals[i])
+		val := []byte(valStr)
 		copy(bck[start +int(klen):start+int(klen)+int(vlen)],val)
 //		fmt.Printf("klen: %d vlen: %d key: %s val %s\n", klen, vlen, string(key), string(val))
 		start = start + int(klen) + int(vlen)
@@ -478,7 +359,6 @@ func (db *DbObj) Load(tabNam string) (err error){
 	(*db).mut.Lock()
 //log.Println("load locking")
 	defer (*db).mut.Unlock()
-	db.Entries = numKeys
 
 	// no need to read keys if there are no entries
 	if numKeys == 0 {
@@ -504,63 +384,12 @@ func (db *DbObj) Load(tabNam string) (err error){
 		key := bckup[start +4: start+4+int(klen)]
 		val := bckup[start +4 + int(klen): start+4+int(klen)+int(vlen)]
 		start = start + 4 + int(klen) + int(vlen)
-		db.Keys[i] = string(key)
-		db.Vals[i] =string(val)
-		h := hash {
-			Hash: GetHash(key),
-			Idx: i,
-		}
-		db.HashList[i] = h
-
+		keyStr := string(key)
+		valStr := string(val)
+		db.KV[keyStr] = valStr
 //		fmt.Printf("klen: %d vlen: %d key: %s val %s\n", klen, vlen, string(key), string(val))
 	}
 	return nil
-}
-
-/*
-func (dbp *DbObj) SortHash(){
-
-    db := *dbp
-	num := (*db.Entries)
-	hashList := (*db.HashList)[:num]
-	for i:=0; i< len(hashList); i++ {
-		fmt.Printf("%d hash: %d idx: %d\n", i,hashList[i].Hash, hashList[i].Idx) 
-	}
-	fmt.Println("***")
-	sort.Slice(hashList, func(i, j int) bool {
-		return hashList[i].Hash < hashList[j].Hash
-	})
-
-	for i:=0; i< len(hashList); i++ {
-		fmt.Printf("%d hash: %d idx: %d\n", i,hashList[i].Hash, hashList[i].Idx) 
-	}
-	fmt.Println("***")
-
-	dbp.HashList = &hashList
-	dbp = &db
-}
-
-*/
-
-func (db *DbObj) PrintDb (idx int, num int) {
-
-    fmt.Printf("************ AzulDb *********\n")
-    fmt.Printf("Dir:    %s\n",db.DirPath)
-    fmt.Printf("Table:  %s\n",db.TabNam)
-    fmt.Printf("********* End AzulKV *******\n")
-
-	fmt.Printf("********* Entries: %d *************\n", (db.Entries))
-	end := idx+num
-	if end > db.Entries {
-		fmt.Printf("invalid idx; idx + num [%d] > entires: %d!\n", idx+num, db.Entries)
-		end = db.Entries
-	}
-	fmt.Println("  i  Idx  Hash    Key   Value")
-	for i:=idx; i<end; i++ {
-		fmt.Printf("  [%2d]: %d %20s %s\n", i, db.HashList[i].Hash, db.Keys[i], db.Vals[i])
-	}
-	fmt.Printf("********* End Entries *************\n")
-	return
 }
 
 func PrintDB (db *DbObj) {
@@ -570,12 +399,63 @@ func PrintDB (db *DbObj) {
     fmt.Printf("Table:  %s\n",db.TabNam)
     fmt.Printf("********* End AzulKV *******\n")
 
-	fmt.Printf("********* Entries: %d *************\n", (db.Entries))
-	fmt.Println("  i  Idx  Hash    Key   Value")
-	for i:=0; i<db.Entries; i++ {
-		fmt.Printf("  [%2d]: %d %20s %s\n", i, db.HashList[i].Hash, db.Keys[i], db.Vals[i])
+	fmt.Printf("********* Entries: %d *************\n", len(db.KV))
+	fmt.Println("  i  Key   Value")
+	cnt:= -1
+	for key, val := range(db.KV) {
+		cnt++
+		fmt.Printf("  [%2d]: %-25s %-45s\n", cnt, key, val)
 	}
 	fmt.Printf("********* End Entries *************\n")
 	return
 }
 
+func PrintDbFil(filPath string) (err error){
+    var numEntries uint32
+//    var numActEntries uint32
+
+    bckup, err := os.ReadFile(filPath)
+    if err != nil {return fmt.Errorf("could not read table: %v", err)}
+
+    siz := len(bckup)
+
+    fmt.Printf("file size: %d\n",siz)
+
+    if siz < 4 {return fmt.Errorf("no valid numEntries found!")}
+
+    numEntries = *(*uint32)(unsafe.Pointer(&bckup[0]))
+
+    fmt.Printf("entries: %d\n", numEntries)
+
+    // no need to read keys if there are no entries
+    if numEntries == 0 {return nil}
+
+//    numActEntries = *(*uint32)(unsafe.Pointer(&bckup[4]))
+
+    numKeys := int(numEntries)
+
+    fmt.Printf("keys: %d\n", numKeys)
+
+//  db.Entries = numKeys
+
+    entries := make([]uint32, int(numEntries))
+
+    for i:=0; i< len(entries); i++ {
+        entries[i] = *(*uint32)(unsafe.Pointer(&bckup[8+i*4]))
+    }
+
+    start := 4 + len(entries)*4
+
+    for i:=0; i< numKeys; i++ {
+        klen := *(*uint16)(unsafe.Pointer(&bckup[start]))
+        vlen := *(*uint16)(unsafe.Pointer(&bckup[start +2]))
+        fmt.Printf("  %d: klen %d vlen %d\n", i, klen, vlen)
+        key := bckup[start+4: start+4+int(klen)]
+        val := bckup[start +4 + int(klen): start+4+int(klen)+int(vlen)]
+        start = start + 4 + int(klen) + int(vlen)
+
+        fmt.Printf("klen: %d vlen: %d key: %s val %s\n", klen, vlen, string(key), string(val))
+    }
+
+    return nil
+}
