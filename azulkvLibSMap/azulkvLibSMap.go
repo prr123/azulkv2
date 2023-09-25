@@ -33,7 +33,7 @@ type DbObj struct {
 //	mut *sync.RWMutex
 	Entries int
 	Cap int
-	KV  sync.map
+	KV  *(sync.Map)
 }
 
 
@@ -48,15 +48,10 @@ func InitDb(dirPath, tbNam string, dbg bool) (dbpt *DbObj, err error){
 		Dbg: dbg,
 		Entries: 0,
 		Cap: 1500,
-		mut: &mutex,
-		KV: kv,
+//		mut: &mutex,
+		KV: &kv,
 	}
 
-/*
-	db.HashList = make([]hash, db.Cap)
-	db.Keys = make([]string, db.Cap)
-	db.Vals = make([]string, db.Cap)
-*/
     // find dir
 	tabPath := dirPath + "/" + tbNam
 
@@ -122,14 +117,6 @@ func (db *DbObj) CloseDb () (err error){
 }
 
 
-func GetHash(bdat []byte) (hash uint64) {
-
-	seed :=uint64(0)
-	hash = t1ha.Sum64(bdat, seed)
-
-	return hash
-}
-
 func GenRanData (rangeStart, rangeEnd int) (bdat []byte) {
 
 	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -149,19 +136,11 @@ func GenRanData (rangeStart, rangeEnd int) (bdat []byte) {
 
 func (db *DbObj) FillRan (level int) (err error){
 
-	h := hash {}
 	for i:=0; i<level; i++ {
 		bdat := GenRanData(5, 25)
-		hashval := GetHash(bdat)
 		valdat := GenRanData(5, 40)
 		valstr := fmt.Sprintf("val-%d_%s",i,string(valdat))
-//		valb := []byte(valstr)
-		db.Keys[i] = string(bdat)
-		h.Idx = i
-		h.Hash = hashval
-		db.HashList[i] = h
-		db.Vals[i] = valstr
-//		fmt.Printf(" %d: %d %s %s\n", i, (*db.Hash)[i], (*db.Keys)[i], (*db.Vals)[i])
+		(db.KV).Store(string(bdat), valstr)
 	}
 	db.Entries = level
 //fmt.Printf("fil db: %v\n", dbpt)
@@ -175,38 +154,37 @@ func (db *DbObj) AddEntry (key, val string) (err error){
 	if ok {return fmt.Errorf("key exists!")}
 
 	(db.KV).Store(key,val)
+	db.Entries++
 
 	return nil
 }
 
 
-func (db *DbObj) UpdEntry (key, val string) (idx int){
+func (db *DbObj) UpdEntry (key, val string) (err error){
 
-	_, ok := db.KV.Load(key)
+	_, ok := (db.KV).Load(key)
 	if !ok {return fmt.Errorf("key not valid!")}
 
 	(db.KV).Store(key,val)
-
+	return nil
 }
 
 
 func (db *DbObj) DelEntry (key string) (err error){
 
 	db.KV.Delete(key)
-
+	db.Entries--
 	return nil
 }
 
 
 func (db *DbObj) GetVal (key string) (val string, err error){
 
-	val, ok := db.KV.Load(key)
+	vald, ok := db.KV.Load(key)
 	if !ok {return "", fmt.Errorf("key not valid!")}
 
-	return val, nil
+	return vald.(string), nil
 }
-
-
 
 func (db *DbObj) FindKey (key string) (err error) {
 
@@ -217,16 +195,46 @@ func (db *DbObj) FindKey (key string) (err error) {
 
 
 func (db *DbObj) Clean () {
-
-
+	(db.KV).Range(func(k, v any) bool {
+		(db.KV).Delete(k)
+		return true
+	})
+	db.Entries = 0
 	return
 }
 
+func (db *DbObj) CompareDb (dbnew *DbObj) (err error){
 
-func (db *DbObj) BackupMap (tabNam string) (err error){
+	keyList := make([]string,20)
+	valList := make([]string,20)
+	cnt:=0
+	(db.KV).Range(func(k, v any) bool {
+		keyList[cnt] = k.(string)
+		valList[cnt] = v.(string)
+		cnt++
+		return true
+	})
 
-	//numEntries
+	for i:=0; i< cnt; i++ {
+		key := keyList[i]
+		valnew, ok := (dbnew.KV).Load(key)
+		if !ok {return fmt.Errorf("item %d: key %s does not exist", i, key)}
+		if valList[i] != valnew.(string) {return fmt.Errorf("item %d: do not agree: %s != %s",i, valList[i], valnew.(string))}
+	}
+	return nil
+}
 
+func (db *DbObj) Backup (tabNam string) (err error){
+
+	cnt:=0
+	(db.KV).Range(func(k, v any) bool {
+		cnt++
+		return true
+	})
+
+	if db.Entries != cnt {log.Printf("Entries: %d  %d\n", db.Entries, cnt)}
+
+	numEntries := cnt
 	dirPath := db.DirPath
 //	log.Printf("backup dirPath: %s\n", dirPath)
 
@@ -271,7 +279,7 @@ func (db *DbObj) BackupMap (tabNam string) (err error){
 // fix problem: need to add size dynamically
 	bck := make([]byte, backSize, 4096*2)
 
-/*
+
 	pt := (*[4]byte)(unsafe.Pointer(&numEnt))[:]
 	copy(bck[:4], pt)
 
@@ -279,27 +287,37 @@ func (db *DbObj) BackupMap (tabNam string) (err error){
 //	fmt.Printf("%d\n", bck[4])
 
 	start := 4
-	for i:=0; i<db.Entries; i++ {
+	cnt = 0
+	(db.KV).Range(func(k, v any) bool {
+		entry := uint32(cnt)
+		pt := (*[4]byte)(unsafe.Pointer(&entry))[:]
+		copy(bck[start+cnt*4:start+(cnt+1)*4], pt)
+		cnt++
+		return true
+	})
+/*
+	for i:=0; i<numEntries; i++ {
 		entry := uint32(i)
 		pt := (*[4]byte)(unsafe.Pointer(&entry))[:]
 		copy(bck[start+i*4:start+(i+1)*4], pt)
 	}
-
-	start = db.Entries*4 + 4
 */
-	start := 0
-	for i:=0; i<db.Entries; i++ {
-		klen := uint16(len(db.Keys[i]))
+
+
+	start = numEntries*4 + 4
+//	cnt = 0
+	(db.KV).Range(func(keyStr, valStr any) bool {
+		klen := uint16(len(keyStr.(string)))
 		pt := (*[2]byte)(unsafe.Pointer(&klen))[:]
 		copy(bck[start:start+2], pt)
-		vlen := uint16(len(db.Vals[i]))
+		vlen := uint16(len(valStr.(string)))
 		pt2 := (*[2]byte)(unsafe.Pointer(&vlen))[:]
 		copy(bck[start+2:start+4], pt2)
 		start = start + 4
 //		fmt.Printf("  %d: kl %d vl %d\n",i, klen, vlen)
-		key := []byte(db.Keys[i])
+		key := []byte(keyStr.(string))
 		copy(bck[start:start+int(klen)],key)
-		val := []byte(db.Vals[i])
+		val := []byte(valStr.(string))
 		copy(bck[start +int(klen):start+int(klen)+int(vlen)],val)
 //		fmt.Printf("klen: %d vlen: %d key: %s val %s\n", klen, vlen, string(key), string(val))
 		start = start + int(klen) + int(vlen)
@@ -308,9 +326,10 @@ func (db *DbObj) BackupMap (tabNam string) (err error){
 //			log.Printf("cap: %d size: %d\n", cap(bck), start)
 			bck = append(bck, make([]byte, 4096)...)
 		}
-	}
+		return true
+	})
 
-	(*db).mut.RUnlock()
+//	(*db).mut.RUnlock()
 	endpt := start
 //	fmt.Printf("endpt: %d\n",endpt)
 
@@ -334,7 +353,7 @@ func (db *DbObj) BackupMap (tabNam string) (err error){
 }
 
 
-func (db *DbObj) LoadMap(tabNam string) (err error){
+func (db *DbObj) Load(tabNam string) (err error){
 	var numEntries uint32
 
 //	capacity := db.Cap
@@ -355,9 +374,9 @@ func (db *DbObj) LoadMap(tabNam string) (err error){
 	numEntries = *(*uint32)(unsafe.Pointer(&bckup[0]))
 	numKeys := int(numEntries)
 
-	(*db).mut.Lock()
+//	(*db).mut.Lock()
 //log.Println("load locking")
-	defer (*db).mut.Unlock()
+//	defer (*db).mut.Unlock()
 	db.Entries = numKeys
 
 	// no need to read keys if there are no entries
@@ -384,45 +403,14 @@ func (db *DbObj) LoadMap(tabNam string) (err error){
 		key := bckup[start +4: start+4+int(klen)]
 		val := bckup[start +4 + int(klen): start+4+int(klen)+int(vlen)]
 		start = start + 4 + int(klen) + int(vlen)
-		db.Keys[i] = string(key)
-		db.Vals[i] =string(val)
-		h := hash {
-			Hash: GetHash(key),
-			Idx: i,
-		}
-		db.HashList[i] = h
-
+		(db.KV).Store(string(key), string(val))
 //		fmt.Printf("klen: %d vlen: %d key: %s val %s\n", klen, vlen, string(key), string(val))
 	}
 	return nil
 }
 
 /*
-func (dbp *DbObj) SortHash(){
-
-    db := *dbp
-	num := (*db.Entries)
-	hashList := (*db.HashList)[:num]
-	for i:=0; i< len(hashList); i++ {
-		fmt.Printf("%d hash: %d idx: %d\n", i,hashList[i].Hash, hashList[i].Idx) 
-	}
-	fmt.Println("***")
-	sort.Slice(hashList, func(i, j int) bool {
-		return hashList[i].Hash < hashList[j].Hash
-	})
-
-	for i:=0; i< len(hashList); i++ {
-		fmt.Printf("%d hash: %d idx: %d\n", i,hashList[i].Hash, hashList[i].Idx) 
-	}
-	fmt.Println("***")
-
-	dbp.HashList = &hashList
-	dbp = &db
-}
-
-*/
-
-func (db *DbObj) PrintDb (idx int, num int) {
+func (db *DbObj) PrintDbAll (idx int, num int) {
 
     fmt.Printf("************ AzulDb *********\n")
     fmt.Printf("Dir:    %s\n",db.DirPath)
@@ -442,6 +430,7 @@ func (db *DbObj) PrintDb (idx int, num int) {
 	fmt.Printf("********* End Entries *************\n")
 	return
 }
+*/
 
 func PrintDB (db *DbObj) {
 
@@ -451,10 +440,13 @@ func PrintDB (db *DbObj) {
     fmt.Printf("********* End AzulKV *******\n")
 
 	fmt.Printf("********* Entries: %d *************\n", (db.Entries))
-	fmt.Println("  i  Idx  Hash    Key   Value")
-	for i:=0; i<db.Entries; i++ {
-		fmt.Printf("  [%2d]: %d %20s %s\n", i, db.HashList[i].Hash, db.Keys[i], db.Vals[i])
-	}
+	fmt.Println("  i  Key   Value")
+	cnt :=0
+	(db.KV).Range(func(keyStr, valStr any) bool {
+		fmt.Printf("  [%2d]: %-20s %-45s\n", cnt, keyStr.(string), valStr.(string))
+		cnt++
+		return true
+	})
 	fmt.Printf("********* End Entries *************\n")
 	return
 }
