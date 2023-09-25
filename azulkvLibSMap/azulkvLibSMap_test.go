@@ -7,11 +7,12 @@ import (
 	"os"
     "math/rand"
     "time"
+//	"sync"
 )
 
 func TestDb(t* testing.T) {
 
-	dbobj, err := InitDb("testDb", "tstdb.db", false)
+	dbobj, err := InitDb("testMSDb", "tstdb.db", false)
 	if err != nil {t.Errorf("error -- InitDb: %v", err)}
 
 //	log.Println("Closing")
@@ -24,12 +25,12 @@ func TestDb(t* testing.T) {
 
 func TestAddEntry(t *testing.T) {
 
-	_, err := os.Stat("testDb/testDb.db")
+	_, err := os.Stat("testMSDb/testDb.db")
 	if err == nil {
-		err1 := os.Remove("testDb/testDb.db")
+		err1 := os.Remove("testMSDb/testDb.db")
 		if err1 != nil {t.Errorf("error -- could not remove files: %v", err1)}
 	}
-	db, err := InitDb("testDb", "testDb.db", false)
+	db, err := InitDb("testMSDb", "testDb.db", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
 //	log.Println("*** initdb completed ****")
@@ -41,100 +42,54 @@ func TestAddEntry(t *testing.T) {
 	if err != nil {t.Errorf("error -- AddEntry: %v", err)}
 //	log.Println("addentry completed")
 
-//	log.Println("*** after AddEntry ****")
-//	db.PrintDb(0,db.Entries)
+    if err1 :=db.FindKey("key1"); err1 != nil {t.Errorf("key not found!")}
 
-//	log.Printf("Entries: %d\n", *db.Entries)
-//	log.Printf("Entries: %d Keys[%d] %s\n", *db.Entries, len(*db.Keys), (*db.Keys)[*db.Entries -1])
-
-	if db.Keys[0] != "key1" {t.Errorf("keys do not agree: %s is not %s!", db.Keys[0], "key1")}
-
-
-	idx, valstr := db.GetVal("key1")
-	if valstr != "val1" {t.Errorf("values do not agree: %s is not %s!", valstr, "val1")}
-	if idx != 0 {t.Errorf("idx is not 0: %d!",idx)}
-
-
-//	if idx<0 || idx>(*kv.Entries) {t.Errorf("invalid index: %d!",idx)}
+    valstr, err := db.GetVal("key1")
+    if err != nil {t.Errorf("GetVal err: %v!",err)}
+    if valstr != "val1" {t.Errorf("values do not agree: %s is not %s!", valstr, "val1")}
 
 }
-
-/*
-func TestGetEntry(t *testing.T) {
-	kv, err := InitKV("testDb", false)
-	if err != nil {t.Errorf("error -- InitKV: %v", err)}
-
-	err = kv.AddEntry("key1", "val1")
-	if err != nil {t.Errorf("error -- AddEntry: %v", err)}
-
-	if (*kv.Keys)[0] != "key1" {t.Errorf("keys do not agree: %s is not %s!", (*kv.Keys)[0], "key1")}
-	if (*kv.Entries) != 1 {t.Errorf("invalid Entries: %d!", (*kv.Entries))}
-
-	idx, valstr := kv.GetVal("key1")
-	if valstr != "val1" {t.Errorf("values do not agree: %s is not %s!", valstr, "val1")}
-	if idx<0 || idx>(*kv.Entries) {t.Errorf("invalid index: %d!",idx)}
-
-	valstr,err = kv.GetValByIdx(0)
-	if err != nil {t.Errorf("error -- GetValByIdx: %v", err)}
-	if valstr != "val1" {t.Errorf("values do not agree: %s is not %s!", valstr, "val1")}
-
-	hash := GetHash([]byte("key1"))
-	idx, valstr = kv.GetValByHash(hash)
-	if valstr != "val1" {t.Errorf("values do not agree: %s is not %s!", valstr, "val1")}
-	if idx<0 || idx>(*kv.Entries) {t.Errorf("invalid index: %d!",idx)}
-
-
-}
-*/
 
 func TestUpdEntry(t *testing.T) {
-	db, err := InitDb("testDb", "testDb.db", false)
-	if err != nil {t.Errorf("error -- InitKV: %v", err)}
+    db, err := InitDb("testMSDb", "testDb.db", false)
+    if err != nil {t.Errorf("error -- InitdB: %v", err)}
 
-	err = db.AddEntry("key1", "val1")
-	if err != nil {t.Errorf("error -- AddEntry: %v", err)}
+    err = db.AddEntry("key1", "val1")
+    if err != nil {t.Errorf("error -- AddEntry: %v", err)}
 
-	if db.Keys[0] != "key1" {t.Errorf("keys do not agree: %s is not %s!", db.Keys[0], "key1")}
+    if err1 :=db.FindKey("key1"); err1 != nil {t.Errorf("key \"key1\" not found!")}
 
-	err = db.AddEntry("key2", "val2")
-	if err != nil {t.Errorf("error -- AddEntry: %v", err)}
+    err = db.AddEntry("key2", "val2")
+    if err != nil {t.Errorf("error -- AddEntry: %v", err)}
 
-	idx := db.FindKey("key2")
-	if idx == -1 {t.Errorf("error -- FindKey: %d key2 not found!", idx)}
-	if idx != 1 {t.Errorf("error -- FindKey: idx %d for key2 should be 1!", idx)}
+    if err1 :=db.FindKey("key2"); err1 != nil {t.Errorf("key \"key2\" not found!")}
 
+    err = db.UpdEntry("key1", "val1New")
+    if err != nil {t.Errorf("error -- UpdEntry: %v", err)}
 
-	err = db.UpdEntryByIdx(idx, "val1New")
-	if err != nil {t.Errorf("error -- UpdEntry: %v", err)}
+    valstr, err := db.GetVal("key1")
+    if err != nil {t.Errorf("GetVal err: %v!",err)}
+    if valstr != "val1New" {t.Errorf("values do not agree: %s is not %s!", valstr, "val1New")}
 
-	valstr,err := db.GetValByIdx(idx)
-	if err != nil {t.Errorf("error -- GetValByIdx: %v", err)}
-	if valstr != "val1New" {t.Errorf("values do not agree: %s is not %s!", valstr, "val1New")}
-
-	db.CloseDb()
+    db.CloseDb()
 }
 
 
 func TestDelEntry(t *testing.T) {
 
-	db, err := InitDb("testDb", "testDb.db", false)
-	if err != nil {t.Errorf("error -- InitKV: %v", err)}
+    db, err := InitDb("testMSDb", "testDb.db", false)
+    if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
-	db.Clean()
-	err = db.AddEntry("key3", "val3")
-	if err != nil {t.Errorf("error -- AddEntry: %v", err)}
+    db.Clean()
+    err = db.AddEntry("key3", "val3")
+    if err != nil {t.Errorf("error -- AddEntry: %v", err)}
 
-	if db.Entries != 1 {t.Errorf("db.Entries should be 1: is %d!", db.Entries)}
-	if db.Keys[0] != "key3" {t.Errorf("keys do not agree: %s is not %s!", db.Keys[0], "key3")}
+    if err1 :=db.FindKey("key3"); err1 != nil {t.Errorf("key \"key3\" not found!")}
 
-	idx := db.FindKey("key3")
-	if idx == -1 {t.Errorf("error -- FindKey: %d key3 not found!", idx)}
+    err = db.DelEntry("key3")
+    if err != nil {t.Errorf("error -- DelEntry: %v", err)}
 
-	err = db.DelEntry(idx)
-	if err != nil {t.Errorf("error -- DelEntry: %v", err)}
-
-	idx = db.FindKey("key3")
-	if idx != -1 {t.Errorf("error -- FindKey: %d key3 not deleted!", idx)}
+    if err1 :=db.FindKey("key3"); err1 == nil {t.Errorf("key \"key3\" found sfter del!")}
 
 	db.CloseDb()
 }
@@ -145,7 +100,7 @@ func TestGet(t *testing.T) {
 
 	numEntries := 10
 
-	db, err := InitDb("testDb", "test2Db.db", false)
+	db, err := InitDb("testMSDb", "test2Db.db", false)
 	if err != nil {t.Errorf("error -- InitDb: %v", err)}
 
 	db.Clean()
@@ -153,15 +108,23 @@ func TestGet(t *testing.T) {
     err = db.FillRan(numEntries)
     if err != nil {t.Errorf("error -- FillRan: %v", err)}
 
-//    err = db.Backup("testBackup.dat")
-//    if err != nil {t.Errorf("error -- Backup: %v", err)}
+    keyList := make([]string, numEntries)
+    valList := make([]string, numEntries)
 
-	for i:= 0; i< 20; i++ {
+	cnt:=0
+	(db.KV).Range(func (k, v any) bool {
+		keyList[cnt] = k.(string)
+		valList[cnt] = v.(string)
+		cnt++
+		return true
+	})
+
+	for i:= 0; i< 30; i++ {
 		kidx := seededRand.Intn(numEntries)
-		keyStr := db.Keys[kidx]
-		idx, valstr := db.GetVal(keyStr)
-		if idx != kidx  {t.Errorf("values do not agree: %d is not %d!", kidx, idx)}
-		if len(valstr) < 1 {t.Errorf("invalid valstr!")}
+        keyStr := keyList[kidx]
+        valstr, err := db.GetVal(keyStr)
+        if err != nil {t.Errorf("GetVal %s: %v", keyStr, err)}
+        if valstr != valList[kidx]  {t.Errorf("values do not agree: %s is not %s!",valstr, valList[kidx])}
 	}
 
 	db.CloseDb()
@@ -170,7 +133,7 @@ func TestGet(t *testing.T) {
 
 func TestBckupAndLoad(t *testing.T) {
 
-	db, err := InitDb("testDb", "testBckupDb.db", false)
+	db, err := InitDb("testMSDb", "testBckupDb.db", false)
 	if err != nil {t.Errorf("error -- InitKV: %v", err)}
 
 	db.Clean()
@@ -183,23 +146,17 @@ func TestBckupAndLoad(t *testing.T) {
 
 //	err = db.Close()
 
-	dbnew, err := InitDb("testDb", "test2BckupDb.db", false)
-	if err != nil {t.Errorf("error -- InitKV: %v", err)}
+	dbnew, err := InitDb("testMSDb", "test2BckupDb.db", false)
+	if err != nil {t.Errorf("error -- InitDb: %v", err)}
 
 	if  db.Entries!= dbnew.Entries {t.Errorf("error entries do not match kv: %d kvnew: %d", db.Entries, dbnew.Entries)}
-	for i:=0; i< db.Entries; i++ {
-		if db.Keys[i] != dbnew.Keys[i] {
-			t.Errorf("error -- no key match at idx[%d] key: %s keynew: %s",i, db.Keys[i], dbnew.Keys[i])
-		}
-	}
-//	err = os.Remove("testDb/testBackup.dat")
-//	if err != nil {t.Errorf("error -- Remove: %v", err)}
+
+	err = db.CompareDb(dbnew)
+	if err != nil {t.Errorf("error -- Compare Dbs: %v", err)}
 
 	db.CloseDb()
 	dbnew.CloseDb()
 }
-
-
 
 func BenchmarkGet100(b *testing.B) {
 
@@ -216,104 +173,25 @@ func BenchmarkGet100(b *testing.B) {
     err = db.FillRan(numEntries)
     if err != nil {log.Fatalf("error -- FillRan: %v", err)}
 
-//    err = kv.Backup("testDbNew_Backup.dat")
-//    if err != nil {log.Fatalf("error -- Backup: %v", err)}
+    keyList := make([]string, numEntries)
+    valList := make([]string, numEntries)
+
+    cnt:=0
+	(db.KV).Range(func(k, v any) bool {
+        keyList[cnt] = k.(string)
+        valList[cnt] = v.(string)
+        cnt++
+		return true
+  })
 
 	b.ResetTimer()
 
 	for n := 0; n < b.N; n++ {
-		kidx := seededRand.Intn(numEntries)
-		keyStr := db.Keys[kidx]
-		idx, valstr := db.GetVal(keyStr)
-		if idx != kidx  {log.Fatalf("values do not agree[%d]: %d is not %d!", n, kidx, idx)}
-		if len(valstr) < 1 {log.Fatalf("invalid valstr!")}
-	}
-}
-
-func BenchmarkGet200(b *testing.B) {
-
-	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	os.RemoveAll("testDbNew")
-
-	numEntries := 200
-	db, err := InitDb("testDb", "testDb200.db", false)
-	if err != nil {log.Fatalf("error -- InitDb: %v", err)}
-
-	db.Clean()
-
-    err = db.FillRan(numEntries)
-    if err != nil {log.Fatalf("error -- FillRan: %v", err)}
-
-//    err = kv.Backup("testDbNew_Backup.dat")
-//    if err != nil {log.Fatalf("error -- Backup: %v", err)}
-
-	b.ResetTimer()
-
-	for n := 0; n < b.N; n++ {
-		kidx := seededRand.Intn(numEntries)
-		keyStr := db.Keys[kidx]
-		idx, valstr := db.GetVal(keyStr)
-		if idx != kidx  {log.Fatalf("values do not agree[%d]: %d is not %d!", n, kidx, idx)}
-		if len(valstr) < 1 {log.Fatalf("invalid valstr!")}
-	}
-}
-
-func BenchmarkGet500(b *testing.B) {
-
-	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	os.RemoveAll("testDbNew")
-
-	numEntries := 500
-	db, err := InitDb("testDb", "testDb500.db", false)
-	if err != nil {log.Fatalf("error -- InitDb: %v", err)}
-
-	db.Clean()
-
-    err = db.FillRan(numEntries)
-    if err != nil {log.Fatalf("error -- FillRan: %v", err)}
-
-//    err = kv.Backup("testDbNew_Backup.dat")
-//    if err != nil {log.Fatalf("error -- Backup: %v", err)}
-
-	b.ResetTimer()
-
-	for n := 0; n < b.N; n++ {
-		kidx := seededRand.Intn(numEntries)
-		keyStr := db.Keys[kidx]
-		idx, valstr := db.GetVal(keyStr)
-		if idx != kidx  {log.Fatalf("values do not agree[%d]: %d is not %d!", n, kidx, idx)}
-		if len(valstr) < 1 {log.Fatalf("invalid valstr!")}
-	}
-}
-
-func BenchmarkGet1000(b *testing.B) {
-
-	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	os.RemoveAll("testDbNew")
-
-	numEntries := 1000
-	db, err := InitDb("testDb", "testDb1000.db", false)
-	if err != nil {log.Fatalf("error -- InitDb: %v", err)}
-
-	db.Clean()
-
-    err = db.FillRan(numEntries)
-    if err != nil {log.Fatalf("error -- FillRan: %v", err)}
-
-//    err = kv.Backup("testDbNew_Backup.dat")
-//    if err != nil {log.Fatalf("error -- Backup: %v", err)}
-
-	b.ResetTimer()
-
-	for n := 0; n < b.N; n++ {
-		kidx := seededRand.Intn(numEntries)
-		keyStr := db.Keys[kidx]
-		idx, valstr := db.GetVal(keyStr)
-		if idx != kidx  {log.Fatalf("values do not agree[%d]: %d is not %d!", n, kidx, idx)}
-		if len(valstr) < 1 {log.Fatalf("invalid valstr!")}
+        kidx := seededRand.Intn(numEntries)
+        keyStr := keyList[kidx]
+        valstr, err := db.GetVal(keyStr)
+        if err != nil {log.Fatalf("GetVal %s: %v", keyStr, err)}
+        if valstr != valList[kidx]  {log.Fatalf("values do not agree: %s is not %s!",valstr, valList[kidx])}
 	}
 }
 
