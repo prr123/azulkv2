@@ -267,7 +267,7 @@ func (db *DbObj) Backup (tabNam string) (err error){
     }
 
 	numEnt := uint32(numEntries)
-	backSize := 4 + int(unsafe.Sizeof(numEnt))*numEntries *2
+	backSize := 4 + int(unsafe.Sizeof(numEnt))*numEntries *4
 
 //  needs examination reg blocksize use!
 // fix problem: need to add size dynamically
@@ -353,12 +353,14 @@ func (db *DbObj) Load(tabNam string) (err error){
 
 	if siz < 4 {return fmt.Errorf("no valid numEntries found!")}
 
-	numEntries = *(*uint32)(unsafe.Pointer(&bckup[0]))
-	numKeys := int(numEntries)
-
 	(*db).mut.Lock()
 //log.Println("load locking")
 	defer (*db).mut.Unlock()
+
+	numEntries = *(*uint32)(unsafe.Pointer(&bckup[0]))
+	numKeys := int(numEntries)
+
+	db.Entries = numKeys
 
 	// no need to read keys if there are no entries
 	if numKeys == 0 {
@@ -441,7 +443,7 @@ func PrintDbFil(filPath string) (err error){
     entries := make([]uint32, int(numEntries))
 
     for i:=0; i< len(entries); i++ {
-        entries[i] = *(*uint32)(unsafe.Pointer(&bckup[8+i*4]))
+        entries[i] = *(*uint32)(unsafe.Pointer(&bckup[4+i*4]))
     }
 
     start := 4 + len(entries)*4
